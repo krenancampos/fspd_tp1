@@ -96,16 +96,11 @@ void* tarefa(void* params){
     int tcritico = parametros_lidos->tcritico;
     int qtd_recursos_pedidos = parametros_lidos->qtd_recursos_pedidos;
     int* recursos_pedidos = parametros_lidos->recursos_pedidos;
-    //printf("\nEsta thread tem id = %d, tlivre = %d, tcritico = %d, qtd_recursos = %d \n", tid, tlivre, tcritico, qtd_recursos_pedidos);
-    /*for (i = 0; i < qtd_recursos_pedidos; i++){
-        recursos_pedidos[i] = rp[i];
-        //printf("\nrecurso %d: %d\n", i, recursos_pedidos[i]);
-    }*/
-    spend_time(tid, NULL, tlivre); // info: E
-    trava_recursos(recursos_pedidos, qtd_recursos_pedidos);     // a forma de representar os recursos é uma decisão do desenvolvedor
-    spend_time(tid, "C", tcritico); //info: C
+    
+    spend_time(tid, NULL, tlivre);
+    trava_recursos(recursos_pedidos, qtd_recursos_pedidos); 
+    spend_time(tid, "C", tcritico);
     libera_recursos(recursos_pedidos, qtd_recursos_pedidos);  
-    //printf("\nTermino da tread %d\n", tid);
     pthread_exit(NULL); 
 }
 
@@ -151,7 +146,7 @@ int main(){
         pthread_join(threads[t].thread_atual, NULL);
     }
 
-    printf("main(): all threads exited.\n");
+    //printf("main(): all threads exited.\n");
 
     for(t = 0; t < n_threads_criadas; t++){
         free(threads[t].recursos_pedidos);

@@ -7,133 +7,175 @@
 #include <math.h>
 #include <string.h>
 
-#define NTHREADS_MAX	1000 /* 32 */
+#define NTHREADS_MAX	1000
 
-int recursos[8];
+/*  Cada thread tem: 
+      -o seu identificador quando é criada (pthread_t);
+      -os parâmetros (tid, tlivre, tcritico) lidos da entrada padrao;
+      -um vetor de inteiros representando os recursos pedidos (0...7) do tamanho da qtd de recursos pedidos.
+*/
+typedef struct dados_thread{ 
+  int tid, tlivre, tcritico, qtd_recursos_pedidos;
+  int* recursos_pedidos;
+  pthread_t thread_atual;
+} dados_thread;
+//-------------------------------------
 
-void init_recursos(){
+/*  Os recursos foram representados como uma struct contendo:
+      -uma variavel 'ocupado' q indica se o recurso já está sendo utilizado (1 - ocupado; 0 - livre);
+      -um mutex que controla o acesso a variavel 'ocupado';
+      -uma variavel de condicao 'recurso_livre' utilizada para sinalizar a liberação.
+*/
+typedef struct recurso{
+  pthread_mutex_t mutex_recurso;
+  pthread_cond_t recurso_livre;
+  int ocupado;
+} recurso;
+//-------------------------------------
+
+recurso recursos_globais[8]; // Como os 8 recursos são globais, é definido um vetor do tipo recurso.
+
+void init_recursos(){ // Inicializa cada um dos 8 recursos globais
   int i;
   for (i=0; i < 8; i++){
-    recursos[i] = i;
+    recursos_globais[i].ocupado = 0;
+    pthread_mutex_init(&(recursos_globais[i].mutex_recurso), NULL);
+    pthread_cond_init(&(recursos_globais[i].recurso_livre), NULL);
   }
 }
 
-/*
-void trava_recursos(int* recursos_thread){
+void trava_recursos(int* recursos_pedidos, int qtd_recursos_pedidos){
+  int k, recurso_pedido, recurso_conseguido, qtd_recursos_conseguidos = 0;
 
+  recurso_pedido = recursos_pedidos[0]; // Inicialmente, para toda thread conseguir aguardar as variaveis de condicao dos recursos de que precisa,
+                                        //  deve conseguir pelo menos o primeiro recurso, aguardando ate conseguir 'lockar' o mutex.
+  pthread_mutex_lock(&(recursos_globais[recurso_pedido].mutex_recurso));
+  recursos_globais[recurso_pedido].ocupado = 1;
+  recurso_conseguido = recursos_pedidos[0];
+  qtd_recursos_conseguidos = 1;
+
+  if(qtd_recursos_pedidos == 1){  // Se não precisa de mais nenhum outro recurso alem daquele único que já conseguiu, volta pra execução da thread.
+    return;
+  }
+
+  // Mas se precisar de mais de um recurso:
+  while(qtd_recursos_conseguidos < qtd_recursos_pedidos){
+
+    recurso_pedido = recursos_pedidos[qtd_recursos_conseguidos]; // O recurso pedido representa o próximo recurso
+
+    while(recursos_globais[recurso_pedido].ocupado){
+      
+      if (qtd_recursos_conseguidos > 1){  //Se a thread já tem mais de um recurso e não conseguiu o atual por estar ocupado:
+
+        for(k = qtd_recursos_conseguidos - 1; k == 1; k--){ //  libera todos os recursos, exceto o primeiro.
+          recurso_conseguido = recursos_pedidos[k];
+          recursos_globais[recurso_conseguido].ocupado = 0;
+          pthread_cond_broadcast(&(recursos_globais[recurso_conseguido].recurso_livre));  // sinaliza p/ todas as q estavam esperando um dado recurso
+          pthread_mutex_unlock(&(recursos_globais[recurso_conseguido].mutex_recurso));
+        }
+
+        qtd_recursos_conseguidos = 1; // mantém apenas o primeiro recurso para conseguir dar wait() na variavel de condicao e libera-lo em seguida
+        recurso_conseguido = recursos_pedidos[0];
+        recurso_pedido = recursos_pedidos[1];
+      } 
+
+      recursos_globais[recurso_conseguido].ocupado = 0; //  prepara para liberar o primeiro recurso
+      pthread_cond_broadcast(&(recursos_globais[recurso_conseguido].recurso_livre));
+      // aguarda o recurso q n conseguiu sinalizando e liberando o primeiro recurso
+      pthread_cond_wait(&(recursos_globais[recurso_pedido].recurso_livre), &(recursos_globais[recurso_conseguido].mutex_recurso));
+      // assim q retorna do wait, consegue a posse do primeiro recurso novamente atraves do mutex e muda a variavel ocupado
+      recursos_globais[recurso_conseguido].ocupado = 1;
+    }
+    
+    // Se o proximo recurso nao está bloqueado, se torna mais um recurso conseguido ao travar com o mutex e mudar a variavel 'ocupado'
+    pthread_mutex_lock(&(recursos_globais[recurso_pedido].mutex_recurso));
+    recursos_globais[recurso_pedido].ocupado = 1;
+    recurso_conseguido = recurso_pedido;
+    qtd_recursos_conseguidos++;
+  }
 }
 
-void libera_recursos(void){
-
+void libera_recursos(int* recursos_pedidos, int qtd_recursos_pedidos){
+  int i, recurso_conseguido;
+  for(i =  0; i < qtd_recursos_pedidos; i++){
+    recurso_conseguido = recursos_pedidos[i];
+    recursos_globais[recurso_conseguido].ocupado = 0;
+    pthread_cond_broadcast(&(recursos_globais[recurso_conseguido].recurso_livre));
+    pthread_mutex_unlock(&(recursos_globais[recurso_conseguido].mutex_recurso));
+  }
 }
 
-
-// No início da thread, ela deve receber como parâmetros seu tid, os tempos livre e crítico
-// e os recursos que ela necessita para completar seu trabalho
-// Em segunda, ela deve executar as operações:
-*/
-
-void tarefa(void* params){
-  //spend_time(int tid, char* info, int time_ds)
-  /*
-  int* thread_params = *((int*) params);
-  int tid = thread_params[0]; //*(thread_params[0])
-  int tlivre = thread_params[1]; 
-  int tcritico = thread_params[2];
-  int* thread_recursos = thread_params[3];
-  */
-  int* numeros = (int*)params;
-  /*
-  spend_time(tid, NULL, tlivre); // info: E
-  trava_recursos(thread_recursos);     // a forma de representar os recursos é uma decisão do desenvolvedor
-  spend_time(tid, "C", tcritico); //info: C
-  libera_recursos();            // note que cada thread deve ser ter sua lista de recursos registrada em algum lugar
-  */
-  pthread_exit(NULL); 
+void* tarefa(void* params){
+    dados_thread* parametros_lidos = (dados_thread*) params;
+    int tid = parametros_lidos->tid;
+    int tlivre = parametros_lidos->tlivre;
+    int tcritico = parametros_lidos->tcritico;
+    int qtd_recursos_pedidos = parametros_lidos->qtd_recursos_pedidos;
+    int* recursos_pedidos = parametros_lidos->recursos_pedidos;
+    
+    spend_time(tid, NULL, tlivre);
+    trava_recursos(recursos_pedidos, qtd_recursos_pedidos); 
+    spend_time(tid, "C", tcritico);
+    libera_recursos(recursos_pedidos, qtd_recursos_pedidos);  
+    pthread_exit(NULL); 
 }
-
-struct params_thread{
-  int tid, tlivre, tcritico, qtdRecursos;
-  int* recursos;
-};
 
 int main(){
-  pthread_t threads[NTHREADS_MAX];
-  int rc, t;
-  int* params; // [tid, tlivre, tcritico, *recursos_thread]
-  int tid, tlivre, tcritico, *recursos_thread;
-  struct params_thread parametros_lidos;
-
-  int numeros[11]; // Tamanho máximo de números inteiros em uma linha, considerando os 8 recursos mais os 3 inteiros (tid, tlivre e tcritico)
+  int rc, t, qtd_recursos_pedidos, qtd_parametros=0, n_threads_criadas=0;
+  int parametros[11]; // Tamanho máximo de números inteiros em uma linha, considerando os 8 recursos mais os 3 inteiros (tid, tlivre e tcritico)
   char linha[32]; // Tamanho máximo da linha em caracteres, considerando que:
                   //  os 3 primeiros inteiros (tid, tlivre e tcritico) podem ter 4 digitos;
                   //  os 8 ultimos inteiros (os recursos) podem ter apenas um digito;
                   //  e os 11 espaços separando cada um dos inteiros e o caracter de fim de linha, totalizando assim 32 caracteres.
-  int qtdNumeros = 0;
+  dados_thread threads[NTHREADS_MAX];
 
   init_recursos();
-  printf("Digite linhas com números inteiros separados por espaço (Ctrl+D para encerrar no Linux):\n");
 
   while ( fgets(linha, sizeof(linha), stdin) != NULL ) {
-      char *token = strtok(linha, " "); // A função strtok() divide a linha lida em fgets() em tokens usando o caracter de espaço
-                                        //  como delimitador, retornando um ponteiro para o próximo token encontrado 
-                                        //  até retornar NULL quando a linha terminar
-      qtdNumeros = 0;
+    char *token = strtok(linha, " "); // A função strtok() divide a linha lida em fgets() em tokens usando o caracter de espaço
+                                      //  como delimitador, retornando um ponteiro para o próximo token encontrado 
+                                      //  até retornar NULL quando a linha terminar
+    qtd_parametros = 0;
 
-      while (token != NULL) { //  O retorno de strtok é NULL quando a linha termina
-          if ( sscanf(token, "%d", &numeros[qtdNumeros]) == 1) {
-              qtdNumeros++;
-          }
-          token = strtok(NULL, " "); // Como deseja-se continuar dividindo a mesma linha lida, 
-                                     //   passa-se NULL como o primeiro parâmetro de strtok(),
-                                     //   obtendo assim o próximo token da mesma linha até terminar
+    while (token != NULL) { //  O retorno de strtok é NULL quando a linha termina
+      if ( sscanf(token, "%d", &parametros[qtd_parametros]) == 1) {
+        qtd_parametros++;
       }
+      token = strtok(NULL, " ");  // Como deseja-se continuar dividindo a mesma linha lida, 
+                                  //   passa-se NULL como o primeiro parâmetro de strtok(),
+                                  //   obtendo assim o próximo token da mesma linha até terminar
+    }
 
-      // Agora, 'numeros' contém os números inteiros da linha e 'qtdNumeros' indica quantos foram lidos
-      //printf("Você digitou %d números inteiros: \n", qtdNumeros);
-      //printf("tid: %d \n", numeros[0]);
-      //printf("tlivre: %d \n", numeros[1]);
-      //printf("tcritico: %d \n", numeros[2]);
-      //printf("recursos: ");
-      /*
-      for (int i = 3; i < qtdNumeros; i++) {
-          printf(" %d ", numeros[i]);
-      }
-      printf("\n");
-      */
+    threads[n_threads_criadas].tid = parametros[0];
+    threads[n_threads_criadas].tlivre = parametros[1];
+    threads[n_threads_criadas].tcritico = parametros[2];
+    qtd_recursos_pedidos =  qtd_parametros - 3;
+    threads[n_threads_criadas].qtd_recursos_pedidos = qtd_recursos_pedidos;
+    // Aloca um vetor de inteiros do tamanho da qtd de recursos pedidos e armazena nos dados da thread.
+    threads[n_threads_criadas].recursos_pedidos = (int*) malloc(sizeof(int)*(qtd_recursos_pedidos));
 
-      parametros_lidos.tid = numeros[0];
-      parametros_lidos.tlivre = numeros[1];
-      parametros_lidos.tcritico = numeros[2];
-      parametros_lidos.qtdRecursos = qtdNumeros - 3;
-      parametros_lidos.recursos = &numeros[3];
-      rc = pthread_create(&threads[t], NULL, tarefa, (void *)&parametros_lidos);
-        if (rc){
-            printf("ERROR: return code from pthread_create() is %d\n", rc);
-            printf("Code %d= %s\n",rc,strerror(rc));
-            exit(-1);
-        }
-
-        for(t=0; t<NTHREADS_MAX; t++){
-          pthread_join(threads[t],NULL);
-        }
-      printf("main(): all threads exited.\n");
-      exit(0);
+    for(t = 0; t < qtd_recursos_pedidos; t++){
+      threads[n_threads_criadas].recursos_pedidos[t] = parametros[3+t]; 
+    }
+    
+    rc = pthread_create(&threads[n_threads_criadas].thread_atual, NULL, tarefa, (void *)&threads[n_threads_criadas]);
+    if (rc){
+        printf("ERROR: return code from pthread_create() is %d\n", rc);
+        printf("Code %d= %s\n",rc,strerror(rc));
+        exit(-1);
+    }
+    n_threads_criadas++;
   }
 
-//int tid, tlivre, tcritico, *recursos_thread;
-//int** params; // [&tid, &tlivre, &tcritico, &recursos_thread]
+  for(t = 0; t < n_threads_criadas; t++){
+      pthread_join(threads[t].thread_atual, NULL);
+  }
 
-//scanf(tid, tlivre, tcritico, recursos_thread);
+  //printf("main(): all threads exited.\n");
 
-  /* for(t=0; t<NTHREADS; t++){
-      //rc = pthread_create(&threads[t], NULL, tarefa, (void *)&params[t])
-        rc = pthread_create(&threads[t], NULL, tarefa, NULL);
-        if (rc){
-            printf("ERROR: return code from pthread_create() is %d\n", rc);
-            printf("Code %d= %s\n",rc,strerror(rc));
-            exit(-1);
-        }
-    }
-  */
+  for(t = 0; t < n_threads_criadas; t++){
+      free(threads[t].recursos_pedidos); // Libera todos os vetores alocados após o termino de todas as threads.
+  }
+
+  exit(0);
 }
