@@ -1,10 +1,10 @@
 # Makefile
 
 # Nome do executável
-TARGET = ep1_limpo
+TARGET = ep1_main
 
 # Lista de arquivos fonte
-SOURCES = ep1_limpo.c spend_time.c
+SOURCES = ep1_main.c spend_time.c
 
 # Lista de arquivos de cabeçalho
 HEADERS = spend_time.h
