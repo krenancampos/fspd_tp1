@@ -90,19 +90,17 @@ void libera_recursos(int* recursos_pedidos, int qtd_recursos_pedidos){
 }
 
 void* tarefa(void* params){
-    dados_thread parametros_lidos = *((dados_thread*) params);
-    int i = 0;
-    int tid = parametros_lidos.tid;
-    int tlivre = parametros_lidos.tlivre;
-    int tcritico = parametros_lidos.tcritico;
-    int qtd_recursos_pedidos = parametros_lidos.qtd_recursos_pedidos;
-    int* rp = parametros_lidos.recursos_pedidos;
-    int recursos_pedidos[qtd_recursos_pedidos];
+    dados_thread* parametros_lidos = (dados_thread*) params;
+    int tid = parametros_lidos->tid;
+    int tlivre = parametros_lidos->tlivre;
+    int tcritico = parametros_lidos->tcritico;
+    int qtd_recursos_pedidos = parametros_lidos->qtd_recursos_pedidos;
+    int* recursos_pedidos = parametros_lidos->recursos_pedidos;
     //printf("\nEsta thread tem id = %d, tlivre = %d, tcritico = %d, qtd_recursos = %d \n", tid, tlivre, tcritico, qtd_recursos_pedidos);
-    for (i = 0; i < qtd_recursos_pedidos; i++){
+    /*for (i = 0; i < qtd_recursos_pedidos; i++){
         recursos_pedidos[i] = rp[i];
         //printf("\nrecurso %d: %d\n", i, recursos_pedidos[i]);
-    }
+    }*/
     spend_time(tid, NULL, tlivre); // info: E
     trava_recursos(recursos_pedidos, qtd_recursos_pedidos);     // a forma de representar os recursos é uma decisão do desenvolvedor
     spend_time(tid, "C", tcritico); //info: C
@@ -118,9 +116,6 @@ int main(){
   dados_thread threads[NTHREADS_MAX];
 
   init_recursos();
-  
-  printf("Digite linhas com números inteiros separados por espaço (Ctrl+D para encerrar no Linux):\n");
-
     while ( fgets(linha, sizeof(linha), stdin) != NULL ) {
         char *token = strtok(linha, " "); 
         qtd_parametros = 0;
@@ -157,5 +152,10 @@ int main(){
     }
 
     printf("main(): all threads exited.\n");
+
+    for(t = 0; t < n_threads_criadas; t++){
+        free(threads[t].recursos_pedidos);
+    }
+
     exit(0);
 }
