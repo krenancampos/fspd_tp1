@@ -3,7 +3,7 @@
  *      (e funções auxiliares) para o primeiro exercício de programação
  *      da disciplina Fundamentos de Sistemas Paralelos e Distribuídos, 2023-1
  ****************************************************************************/
-#define _POSIX_C_SOURCE 199309L
+//#define _POSIX_C_SOURCE 199309L
 
 #include "spend_time.h" // protótipo de spend_time_ms
 
@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
     spend_time(3,NULL,13);
     spend_time(4,"D",17);
 }
-
+*/
 
 /* Saída esperada do programa de teste:
  *	

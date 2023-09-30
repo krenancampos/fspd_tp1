@@ -1,7 +1,7 @@
 # Makefile
 
 # Nome do executável
-TARGET = ep1
+TARGET = ep1_limpo
 
 # Lista de arquivos fonte
 SOURCES = ep1_limpo.c spend_time.c
